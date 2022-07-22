@@ -7,5 +7,5 @@ presubmits:
     containers:
     - image: quay.io/fedora/fedora
       command:
-      - make
-      - bundle
+      - dnf install -y make
+      - make bundle
