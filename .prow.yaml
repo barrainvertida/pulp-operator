@@ -1,5 +1,5 @@
 presubmits:
-- name: pull-test-infra-yamllint
+- name: prow-ocp-deploy
   always_run: true
   decorate: true
   skip_report: false
