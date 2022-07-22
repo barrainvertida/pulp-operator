@@ -6,5 +6,5 @@ presubmits:
   spec:
     containers:
     - image: quay.io/rhn_support_hyagi/prow-test:latest
-    command:
-    - .ci/prow/openshift-test.sh
+      command:
+      - .ci/prow/openshift-test.sh
