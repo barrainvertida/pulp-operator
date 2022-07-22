@@ -7,7 +7,7 @@ presubmits:
     containers:
     - image: quay.io/rhn_support_hyagi/prow-test:latest
       command:
-      - .ci/prow/openshift-test.sh /etc/kubeconfig/config
+      - .ci/prow/openshift-test.sh
     volumeMounts:
     - name: kubeconfig
       mountPath: /etc/kubeconfig
