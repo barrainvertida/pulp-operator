@@ -5,7 +5,7 @@ presubmits:
   skip_report: false
   spec:
     containers:
-    - image: quay.io/kubermatic/yamllint:0.1
+    - image: quay.io/fedora/fedora
       command:
-      - echo
-      - "it works"
+      - make
+      - bundle

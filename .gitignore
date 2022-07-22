@@ -2,6 +2,8 @@
 # Ignore pyenv file
 .python-version
 
+*.swp
+
 # Ignore pipenv files
 Pipfile
 Pipfile.lock
