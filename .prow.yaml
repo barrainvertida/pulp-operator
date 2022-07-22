@@ -1,5 +1,5 @@
 presubmits:
-- name: prow-ocp-deploy
+- name: prow-operator-ocp-deploy
   always_run: true
   decorate: true
   skip_report: false
