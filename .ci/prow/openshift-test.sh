@@ -4,6 +4,7 @@ set -e #fail in case of non zero return
 
 CI_TEST=${CI_TEST:-pulp}
 API_ROOT=${API_ROOT:-"/pulp/"}
+OPERATOR_NAMESPACE=${OPERATOR_NAMESPACE:-"pulp-operator-system"}
 
 show_logs() {
   oc get pods -o wide
