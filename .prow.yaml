@@ -1,6 +1,24 @@
 # test
+presets:
+- labels:
+    preset-test: "true"
+  env:
+  - name: KUBECONFIG
+    value: /etc/kubeconfig/config
+  volumes:
+  - name: kubeconfig
+    secret:
+      defaultMode: 0644
+      secretName: kubeconfig
+  volumeMounts:
+  - name: kubeconfig
+    mountPath: /etc/kubeconfig
+    readonly: true
+
 presubmits:
 - name: prow-build-image
+  labels:
+    preset-test: "true"
   always_run: true
   decorate: true
   skip_report: false
@@ -9,16 +27,9 @@ presubmits:
     - image: quay.io/rhn_support_hyagi/prow-test:latest
       command:
       - .ci/prow/build-ocp-image.sh
-      volumeMounts:
-      - name: kubeconfig
-        mountPath: /etc/kubeconfig
-        readOnly: true
-    volumes:
-    - name: kubeconfig
-      secret:
-        defaultMode: 0644
-        secretName: kubeconfig # example above contains a `config` key
 - name: prow-operator-ocp-deploy
+  labels:
+    preset-test: "true"
   always_run: true
   decorate: true
   skip_report: false
@@ -27,16 +38,9 @@ presubmits:
     - image: quay.io/rhn_support_hyagi/prow-test:latest
       command:
       - .ci/prow/openshift-test.sh
-      volumeMounts:
-      - name: kubeconfig
-        mountPath: /etc/kubeconfig
-        readOnly: true
-    volumes:
-    - name: kubeconfig
-      secret:
-        defaultMode: 0644
-        secretName: kubeconfig # example above contains a `config` key
 - name: prow-operator-ocp-checks
+  labels:
+    preset-test: "true"
   always_run: true
   decorate: true
   skip_report: false
@@ -45,16 +49,9 @@ presubmits:
     - image: quay.io/rhn_support_hyagi/prow-test:latest
       command:
       - .ci/prow/check-deployment.sh
-      volumeMounts:
-      - name: kubeconfig
-        mountPath: /etc/kubeconfig
-        readOnly: true
-    volumes:
-    - name: kubeconfig
-      secret:
-        defaultMode: 0644
-        secretName: kubeconfig # example above contains a `config` key
 - name: prow-operator-ocp-uninstall
+  labels:
+    preset-test: "true"
   always_run: true
   decorate: true
   skip_report: false
@@ -63,12 +60,3 @@ presubmits:
     - image: quay.io/rhn_support_hyagi/prow-test:latest
       command:
       - .ci/prow/uninstall.sh
-      volumeMounts:
-      - name: kubeconfig
-        mountPath: /etc/kubeconfig
-        readOnly: true
-    volumes:
-    - name: kubeconfig
-      secret:
-        defaultMode: 0644
-        secretName: kubeconfig # example above contains a `config` key
