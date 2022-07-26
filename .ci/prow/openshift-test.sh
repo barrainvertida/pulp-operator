@@ -1,10 +1,24 @@
 #!/usr/bin/env bash
 
-set -e #fail in case of non zero return
+set -ex #fail in case of non zero return
 
 CI_TEST=${CI_TEST:-pulp}
 API_ROOT=${API_ROOT:-"/pulp/"}
 OPERATOR_NAMESPACE=${OPERATOR_NAMESPACE:-"pulp-operator-system"}
+BC_NAME="pulp-operator"
+
+# wait until build finishes its execution
+while [[ ! $(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME) ]] ; do
+  sleep 2
+done
+oc -n $OPERATOR_NAMESPACE wait --timeout=300s --for=condition=Running=false $(oc -n $OPERATOR_NAMESPACE get build ${BC_NAME}-$(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME -ojsonpath='{.status.lastVersion}') -oname)
+
+# we should abort execution if the build failed because without the built image the remaining tasks will also fail
+if [ $(oc -n $OPERATOR_NAMESPACE  get build ${BC_NAME}-$(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME -ojsonpath='{.status.lastVersion}')  -ojsonpath='{.status.phase}') != 'Complete' ] ; then
+  echo "Build failed!"
+  exit 1
+fi
+
 
 show_logs() {
   oc get pods -o wide
