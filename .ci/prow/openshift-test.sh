@@ -7,13 +7,14 @@ API_ROOT=${API_ROOT:-"/pulp/"}
 OPERATOR_NAMESPACE=${OPERATOR_NAMESPACE:-"pulp-operator-system"}
 BC_NAME="pulp-operator"
 
-# wait until build finishes its execution
-while [[ ! $(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME) ]] ; do
-  sleep 2
-done
+# make sure that bc is already created
+while [[ ! $(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME) ]] ; do sleep 2 ;done
+# wait until bc updates its version (instantiate the first build)
+while [[ $(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME -ojsonpath='{.status.lastVersion}') == 0 ]] ; do sleep 2 ; done
+# wait until the build finishes
 oc -n $OPERATOR_NAMESPACE wait --timeout=300s --for=condition=Running=false $(oc -n $OPERATOR_NAMESPACE get build ${BC_NAME}-$(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME -ojsonpath='{.status.lastVersion}') -oname)
 
-# we should abort execution if the build failed because without the built image the remaining tasks will also fail
+# we should abort execution if the build failed (without the built image the remaining tasks will also fail)
 if [ $(oc -n $OPERATOR_NAMESPACE  get build ${BC_NAME}-$(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME -ojsonpath='{.status.lastVersion}')  -ojsonpath='{.status.phase}') != 'Complete' ] ; then
   echo "Build failed!"
   exit 1
@@ -38,12 +39,19 @@ show_logs() {
   exit 1
 }
 
-sed -i 's/kubectl/oc/g' Makefile
-make deploy IMG=quay.io/pulp/pulp-operator:devel
-oc apply -f .ci/assets/kubernetes/pulp-admin-password.secret.yaml
-
 ROUTE_HOST="pulpci.$(oc get ingresses.config/cluster -o jsonpath={.spec.domain})"
 echo $ROUTE_HOST
+make deploy IMG=`oc -n $OPERATOR_NAMESPACE get is $BC_NAME -o go-template='{{.status.dockerImageRepository}}:{{(index .status.tags 0).tag}}'`
+
+### THIS IS A WORKAROUND TO FIX AN ISSUE ON MANUALLY DEFINING THE REDHAT-OPERATORS-PULL-SECRET IMAGEPULLSECRET
+### CAUSING THE OTHER PULL SECRETS FROM SA (LIKE THE ONE FROM INTERNAL REGISTRY) NOT BEING AVAILABLE TO THE PODS
+oc -n $OPERATOR_NAMESPACE secret link pulp-operator-sa redhat-operators-pull-secret --for=pull
+oc -n $OPERATOR_NAMESPACE patch deployment pulp-operator-controller-manager --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/imagePullSecrets", "value":[]}]'
+
+### update deployment/pulp-operator-controller-manager to use our built image instead of the one from quay
+oc -n $OPERATOR_NAMESPACE set image-lookup deploy/pulp-operator-controller-manager
+
+oc apply -n $OPERATOR_NAMESPACE --kubeconfig=/etc/kubeconfig/config -f .ci/assets/kubernetes/pulp-admin-password.secret.yaml
 
 if [[ "$CI_TEST" == "galaxy" ]]; then
   CR_FILE=config/samples/pulpproject_v1beta1_pulp_cr.galaxy.ocp.ci.yaml
