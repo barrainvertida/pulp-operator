@@ -59,14 +59,31 @@ else
   CR_FILE=config/samples/pulpproject_v1beta1_pulp_cr.ocp.ci.yaml
 fi
 
-sed -i "s/route_host_placeholder/$ROUTE_HOST/g" $CR_FILE
-oc apply -f $CR_FILE
-oc wait --for condition=Pulp-Routes-Ready --timeout=-1s -f $CR_FILE || show_logs
+# create network policy to allow the router pods to communicate with the pods from pulp namespace
+oc apply -n $OPERATOR_NAMESPACE -f-<<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-openshift-ingress
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          network.openshift.io/policy-group: ingress
+  podSelector: {}
+  policyTypes:
+  - Ingress
+EOF
 
-API_POD=$(oc get pods -l app.kubernetes.io/component=api -oname)
+sed -i "s/route_host_placeholder/$ROUTE_HOST/g" $CR_FILE
+oc -n $OPERATOR_NAMESPACE apply -f $CR_FILE
+oc -n $OPERATOR_NAMESPACE wait --for condition=Pulp-Routes-Ready --timeout=-1s -f $CR_FILE || show_logs
+
+API_POD=`oc -n $OPERATOR_NAMESPACE --kubeconfig=/etc/kubeconfig/config get pods -l app.kubernetes.io/component=api -oname`
 for tries in {0..180}; do
-  pods=$(oc get pods -o wide)
-  if [[ $(kubectl logs "$API_POD"|grep 'Listening at: ') ]]; then
+  pods=$(oc -n $OPERATOR_NAMESPACE get pods -o wide)
+  if [[ $(oc -n $OPERATOR_NAMESPACE logs "$API_POD"|grep 'Listening at: ') ]]; then
     echo "PODS:"
     echo "$pods"
     break
@@ -90,7 +107,8 @@ for tries in {0..180}; do
   fi
   sleep 5
 done
-oc exec ${API_POD} -- curl -L http://localhost:24817${API_ROOT}api/v3/status/ || show_logs
+oc -n $OPERATOR_NAMESPACE exec ${API_POD} -- curl -L http://localhost:24817${API_ROOT}api/v3/status/ || show_logs
+oc -n $OPERATOR_NAMESPACE --kubeconfig=/etc/kubeconfig/config exec ${API_POD} -- curl -L http://localhost:24817${API_ROOT}api/v3/status/ || show_logs
 
 BASE_ADDR="https://${ROUTE_HOST}"
 echo ${BASE_ADDR}${API_ROOT}api/v3/status/
