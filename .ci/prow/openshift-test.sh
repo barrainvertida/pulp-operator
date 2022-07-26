@@ -45,7 +45,7 @@ make deploy IMG=`oc -n $OPERATOR_NAMESPACE get is $BC_NAME -o go-template='{{.st
 
 ### THIS IS A WORKAROUND TO FIX AN ISSUE ON MANUALLY DEFINING THE REDHAT-OPERATORS-PULL-SECRET IMAGEPULLSECRET
 ### CAUSING THE OTHER PULL SECRETS FROM SA (LIKE THE ONE FROM INTERNAL REGISTRY) NOT BEING AVAILABLE TO THE PODS
-oc -n $OPERATOR_NAMESPACE secret link pulp-operator-sa redhat-operators-pull-secret --for=pull
+#oc -n $OPERATOR_NAMESPACE secret link pulp-operator-sa redhat-operators-pull-secret --for=pull
 oc -n $OPERATOR_NAMESPACE patch deployment pulp-operator-controller-manager --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/imagePullSecrets", "value":[]}]'
 
 ### update deployment/pulp-operator-controller-manager to use our built image instead of the one from quay
