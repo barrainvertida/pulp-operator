@@ -101,11 +101,12 @@ echo "[OK] no pulp-web resource found ..."
 # e2e tests
 #############
 # skipping tls verification as we already checked it
-skopeo login --tls-verify=false -u admin -p $(oc -n $OPERATOR_NAMESPACE extract secret/example-pulp-admin-password --to=-) "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"
+# pointing the authfile to /tmp because by default it writes a file into /run/containers which is not allowed in our prow-test image
+skopeo login --authfile=/tmp/test-skopeo --tls-verify=false -u admin -p $(oc -n $OPERATOR_NAMESPACE extract secret/example-pulp-admin-password --to=-) "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"
 if [ $? != 0 ] ; then exit 25 ; fi
 echo "[OK] skopeo login ..."
 
-skopeo copy --dest-tls-verify=false docker://quay.io/operator-framework/opm docker://"${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"/${OPERATOR_NAMESPACE}/test:latest
+skopeo copy --authfile=/tmp/test-skopeo --dest-tls-verify=false docker://quay.io/operator-framework/opm docker://"${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"/${OPERATOR_NAMESPACE}/test:latest
 if [ $? != 0 ] ; then exit 26 ; fi
 echo "[OK] skopeo copy ..."
 
