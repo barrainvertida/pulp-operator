@@ -8,6 +8,10 @@
 # 21 - a wrong certificate configured on route
 # 22 - a wrong key cert configured on route
 # 23 - the hostname does not match certificate subject SAN or common name
+# 24 - found a pulp-web resource when it should not be deployed
+# 25 - failed to authenticate in pulp-container
+# 26 - failed to push image to pulp-container
+# 27 - failed to pull image from pulp-container
 
 set -e #fail in case of non zero return
 
@@ -34,7 +38,7 @@ if [ ${root_path[1]} != "/" ] ; then exit 2 ; fi
 if [ ${root_path[2]} != "api-24817" ] ; then exit 3 ; fi
 if [ ${root_path[3]} != "edge" ] ; then exit 4 ; fi
 if [ ${root_path[4]} != "${PULP_INSTANCE}-api-svc" ] ; then exit 5 ; fi
-echo "/ path OK..."
+echo "[OK] / path ..."
 
 # check /api/v3/ path
 api_v3_path=( $(oc -n $OPERATOR_NAMESPACE get route ${PULP_INSTANCE}-api-v3 -ogo-template="$OUTPUT_TEMPLATE") )
@@ -43,7 +47,7 @@ if [ ${api_v3_path[1]} != "/pulp/api/v3/" ] ; then exit 7 ; fi
 if [ ${api_v3_path[2]} != "api-24817" ] ; then exit 8 ; fi
 if [ ${api_v3_path[3]} != "edge" ] ; then exit 9 ; fi
 if [ ${api_v3_path[4]} != "${PULP_INSTANCE}-api-svc" ] ; then exit 10 ; fi
-echo "/api/v3/ path OK..."
+echo "[OK] /api/v3/ path ..."
 
 # check /auth/login
 auth_login=( $(oc -n $OPERATOR_NAMESPACE get route ${PULP_INSTANCE}-auth -ogo-template="$OUTPUT_TEMPLATE") )
@@ -52,7 +56,7 @@ if [ ${auth_login[1]} != "/auth/login/" ] ; then exit 12 ; fi
 if [ ${auth_login[2]} != "api-24817" ] ; then exit 13 ; fi
 if [ ${auth_login[3]} != "edge" ] ; then exit 14 ; fi
 if [ ${auth_login[4]} != "${PULP_INSTANCE}-api-svc" ] ; then exit 15 ; fi
-echo "/auth/login/ path OK..."
+echo "[OK] /auth/login/ path ..."
 
 # check /pulp/content/
 core_content=( $(oc -n $OPERATOR_NAMESPACE get route ${PULP_INSTANCE}-content -ogo-template="$OUTPUT_TEMPLATE") )
@@ -61,7 +65,7 @@ if [ ${core_content[1]} != "/pulp/content/" ] ; then exit 17 ; fi
 if [ ${core_content[2]} != "content-24816" ] ; then exit 18 ; fi
 if [ ${core_content[3]} != "edge" ] ; then exit 19 ; fi
 if [ ${core_content[4]} != "${PULP_INSTANCE}-content-svc" ] ; then exit 20 ; fi
-echo "/pulp/content/ path OK..."
+echo "[OK] /pulp/content/ path ..."
 
 # should also tests things like:
 # - if deployment type=galaxy and /pulp_cookbook/content/ route is present ERROR
@@ -71,8 +75,7 @@ echo "/pulp/content/ path OK..."
 # check route certificates
 route_secret=$(oc -n $OPERATOR_NAMESPACE get pulp $PULP_INSTANCE -ojsonpath='{.spec.route_tls_secret}')
 if [[ $route_secret != "" ]] ; then
-  routes=$(oc -n $OPERATOR_NAMESPACE get routes -oname)
-  for route in $routes ; do
+  for route in $(oc -n $OPERATOR_NAMESPACE get routes -oname) ; do
     route_certificate=$(oc -n $OPERATOR_NAMESPACE get route $route -ogo-template='{{.spec.tls.certificate}}{{"\n"}}' | md5sum)
     secret_certificate=$(oc -n $OPERATOR_NAMESPACE extract "secret/$route_secret" --keys=tls.crt  --to=- | md5sum)
     if [[ $secret_certificate != $route_certificate ]] ; then exit 21 ; fi
@@ -81,10 +84,34 @@ if [[ $route_secret != "" ]] ; then
     secret_cert_key=$(oc -n $OPERATOR_NAMESPACE extract "secret/$route_secret" --keys=tls.key  --to=- | md5sum)
     if [[ $route_cert_key != $secret_cert_key ]] ; then exit 22 ; fi
   done
+  echo "[OK] route certificates ..."
 fi
+
 
 # validate route hostname and certificate
 check_host_cert=$(echo | openssl s_client -verify_hostname  "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"  -connect "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}":443 2>/dev/null | awk -F': ' '/Verification/ {print $2}')
 if [[ "$check_host_cert" != "OK" ]] ; then exit 23 ; fi
+echo "[OK] hostname matching certificate subject ..."
 
-echo "All paths OK!"
+# check pulp-web components
+if [[ $(oc -n $OPERATOR_NAMESPACE get svc,deployment,cm -l "app.kubernetes.io/name=nginx" -o name | wc -l) > 0 ]] ; then exit 24 ;fi
+echo "[OK] no pulp-web resource found ..."
+
+#############
+# e2e tests
+#############
+# skipping tls verification as we already checked it
+skopeo login --tls-verify=false -u admin -p $(oc -n $OPERATOR_NAMESPACE extract secret/example-pulp-admin-password --to=-) "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"
+if [ $? != 0 ] ; then exit 25 ; fi
+echo "[OK] skopeo login ..."
+
+skopeo copy --dest-tls-verify=false docker://quay.io/operator-framework/opm docker://"${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"/${OPERATOR_NAMESPACE}/test:latest
+if [ $? != 0 ] ; then exit 26 ; fi
+echo "[OK] skopeo copy ..."
+
+oc -n $OPERATOR_NAMESPACE create secret docker-registry pulp-test --docker-server="${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}" --docker-username=admin --docker-password="$(oc -n $OPERATOR_NAMESPACE extract secret/example-pulp-admin-password --to=-)"
+oc -n $OPERATOR_NAMESPACE import-image --insecure=true test-image --from=${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}/${OPERATOR_NAMESPACE}/test:latest --confirm
+if [[ ! $(oc -n $OPERATOR_NAMESPACE get is test-image -ojsonpath='{.status.tags[0].items[0].generation}') > 0 ]] ; then exit 27 ; fi
+echo "[OK] image pulled ..."
+
+echo "All route configurations OK!"
