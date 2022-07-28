@@ -3,6 +3,10 @@ base_images:
     name: "latest"
     namespace: ocp
     tag: ansible-operator
+build_root:
+  project_image:
+    dockerfile_path: .ci/prow/Dockerfile.ci-operator
+  use_build_cache: true
 images:
 - dockerfile_path: Dockerfile
   from: ansible-operator
@@ -23,6 +27,13 @@ resources:
 tests:
 - as: operator-e2e
   steps:
+    dependencies:
+      OO_INDEX: ci-index
+    env:
+      OO_CHANNEL: alpha
+      OO_INSTALL_NAMESPACE: pulp-operator-system
+      OO_PACKAGE: pulp-operator
+      OO_TARGET_NAMESPACES: '!install'
     test:
     - as: e2e
       commands: .ci/prow/check-deployment.sh

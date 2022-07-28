@@ -1,0 +1,11 @@
+base_images:
+  golangci-lint:
+    namespace: openshift
+    name: golang
+    tag: latest
+tests:
+- as: lint
+  commands: golangci-lint run ./...
+  container:
+    from: golangci-lint
+    clone: true # Defaults to "true", set to "false" if you do not want your source code to be present.
