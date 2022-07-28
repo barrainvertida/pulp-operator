@@ -60,3 +60,18 @@ presubmits:
     - image: quay.io/rhn_support_hyagi/prow-test:latest
       command:
       - .ci/prow/uninstall.sh
+- name: ci-operator
+  labels:
+    preset-test: "true"
+  always_run: true
+  decorate: true
+  skip_report: false
+  spec:
+    containers:
+    - image: quay.io/rhn_support_hyagi/ci-operator:test
+      args:
+      - --config=.ci/prow/test.yaml
+      - --git-ref=barrainvertida/pulp-operator@test-prow
+      - --target=.
+      command:
+      - ci-operator
