@@ -30,42 +30,7 @@ echo "Waiting operator finishes its execution ..."
 # wait until operator finishes its execution to start the tests
 oc -n $OPERATOR_NAMESPACE wait --for condition=Pulp-Operator-Finished-Execution pulp/$PULP_INSTANCE --timeout=-1s
 
-OUTPUT_TEMPLATE='{{.spec.host}} {{.spec.path}} {{.spec.port.targetPort}} {{.spec.tls.termination}} {{.spec.to.name}}'
-# check root path
-root_path=( $(oc -n $OPERATOR_NAMESPACE get route $PULP_INSTANCE -ogo-template="$OUTPUT_TEMPLATE") )
-if [ ${root_path[0]} != "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}" ] ; then exit 1 ; fi
-if [ ${root_path[1]} != "/" ] ; then exit 2 ; fi
-if [ ${root_path[2]} != "api-24817" ] ; then exit 3 ; fi
-if [ ${root_path[3]} != "edge" ] ; then exit 4 ; fi
-if [ ${root_path[4]} != "${PULP_INSTANCE}-api-svc" ] ; then exit 5 ; fi
-echo "[OK] / path ..."
-
-# check /api/v3/ path
-api_v3_path=( $(oc -n $OPERATOR_NAMESPACE get route ${PULP_INSTANCE}-api-v3 -ogo-template="$OUTPUT_TEMPLATE") )
-if [ ${api_v3_path[0]} != "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}" ] ; then exit 6 ; fi
-if [ ${api_v3_path[1]} != "/pulp/api/v3/" ] ; then exit 7 ; fi
-if [ ${api_v3_path[2]} != "api-24817" ] ; then exit 8 ; fi
-if [ ${api_v3_path[3]} != "edge" ] ; then exit 9 ; fi
-if [ ${api_v3_path[4]} != "${PULP_INSTANCE}-api-svc" ] ; then exit 10 ; fi
-echo "[OK] /api/v3/ path ..."
-
-# check /auth/login
-auth_login=( $(oc -n $OPERATOR_NAMESPACE get route ${PULP_INSTANCE}-auth -ogo-template="$OUTPUT_TEMPLATE") )
-if [ ${auth_login[0]} != "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}" ] ; then exit 11 ; fi
-if [ ${auth_login[1]} != "/auth/login/" ] ; then exit 12 ; fi
-if [ ${auth_login[2]} != "api-24817" ] ; then exit 13 ; fi
-if [ ${auth_login[3]} != "edge" ] ; then exit 14 ; fi
-if [ ${auth_login[4]} != "${PULP_INSTANCE}-api-svc" ] ; then exit 15 ; fi
-echo "[OK] /auth/login/ path ..."
-
-# check /pulp/content/
-core_content=( $(oc -n $OPERATOR_NAMESPACE get route ${PULP_INSTANCE}-content -ogo-template="$OUTPUT_TEMPLATE") )
-if [ ${core_content[0]} != "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}" ] ; then exit 16 ; fi
-if [ ${core_content[1]} != "/pulp/content/" ] ; then exit 17 ; fi
-if [ ${core_content[2]} != "content-24816" ] ; then exit 18 ; fi
-if [ ${core_content[3]} != "edge" ] ; then exit 19 ; fi
-if [ ${core_content[4]} != "${PULP_INSTANCE}-content-svc" ] ; then exit 20 ; fi
-echo "[OK] /pulp/content/ path ..."
+source .ci/prow/check_route_paths.sh
 
 # should also tests things like:
 # - if deployment type=galaxy and /pulp_cookbook/content/ route is present ERROR
@@ -114,5 +79,7 @@ oc -n $OPERATOR_NAMESPACE create secret docker-registry pulp-test --docker-serve
 oc -n $OPERATOR_NAMESPACE import-image --insecure=true test-image --from=${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}/${OPERATOR_NAMESPACE}/test:latest --confirm
 if [[ ! $(oc -n $OPERATOR_NAMESPACE get is test-image -ojsonpath='{.status.tags[0].items[0].generation}') > 0 ]] ; then exit 27 ; fi
 echo "[OK] image pulled ..."
+
+source .ci/prow/modify_route.sh
 
 echo "All route configurations OK!"
