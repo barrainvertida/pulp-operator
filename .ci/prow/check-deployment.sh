@@ -25,12 +25,14 @@ echo "Waiting pulp instance ..."
 while true ; do if [ $(oc -n $OPERATOR_NAMESPACE get pulp $PULP_INSTANCE -oname) ] ; then break ; else sleep 30 ; fi ; done
 
 INGRESS_DEFAULT_DOMAIN=$(oc -n $OPERATOR_NAMESPACE get ingresses.config/cluster -o jsonpath={.spec.domain})
+ROUTE_PATH=$(oc -n $OPERATOR_NAMESPACE get pulp $PULP_INSTANCE -ojsonpath='{.spec.route_host}')
+ROUTE_PATH=${ROUTE_PATH:-"${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"}
 
 echo "Waiting operator finishes its execution ..."
 # wait until operator finishes its execution to start the tests
 oc -n $OPERATOR_NAMESPACE wait --for condition=Pulp-Operator-Finished-Execution pulp/$PULP_INSTANCE --timeout=-1s
 
-source .ci/prow/check_route_paths.sh
+source .ci/prow/check_route_paths.sh $ROUTE_PATH
 
 # should also tests things like:
 # - if deployment type=galaxy and /pulp_cookbook/content/ route is present ERROR
@@ -54,7 +56,7 @@ fi
 
 
 # validate route hostname and certificate
-check_host_cert=$(echo | openssl s_client -verify_hostname  "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"  -connect "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}":443 2>/dev/null | awk -F': ' '/Verification/ {print $2}')
+check_host_cert=$(echo | openssl s_client -verify_hostname  ${ROUTE_PATH} -connect ${ROUTE_PATH}:443 2>/dev/null | awk -F': ' '/Verification/ {print $2}')
 if [[ "$check_host_cert" != "OK" ]] ; then exit 23 ; fi
 echo "[OK] hostname matching certificate subject ..."
 
@@ -67,16 +69,16 @@ echo "[OK] no pulp-web resource found ..."
 #############
 # skipping tls verification as we already checked it
 # pointing the authfile to /tmp because by default it writes a file into /run/containers which is not allowed in our prow-test image
-skopeo login --authfile=/tmp/test-skopeo --tls-verify=false -u admin -p $(oc -n $OPERATOR_NAMESPACE extract secret/example-pulp-admin-password --to=-) "${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"
+skopeo login --authfile=/tmp/test-skopeo --tls-verify=false -u admin -p $(oc -n $OPERATOR_NAMESPACE extract secret/example-pulp-admin-password --to=-) $ROUTE_PATH
 if [ $? != 0 ] ; then exit 25 ; fi
 echo "[OK] skopeo login ..."
 
-skopeo copy --authfile=/tmp/test-skopeo --dest-tls-verify=false docker://quay.io/operator-framework/opm docker://"${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"/${OPERATOR_NAMESPACE}/test:latest
+skopeo copy --authfile=/tmp/test-skopeo --dest-tls-verify=false docker://quay.io/operator-framework/opm docker://"${ROUTE_PATH}"/${OPERATOR_NAMESPACE}/test:latest
 if [ $? != 0 ] ; then exit 26 ; fi
 echo "[OK] skopeo copy ..."
 
-oc -n $OPERATOR_NAMESPACE create secret docker-registry pulp-test --docker-server="${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}" --docker-username=admin --docker-password="$(oc -n $OPERATOR_NAMESPACE extract secret/example-pulp-admin-password --to=-)"
-oc -n $OPERATOR_NAMESPACE import-image --insecure=true test-image --from=${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}/${OPERATOR_NAMESPACE}/test:latest --confirm
+oc -n $OPERATOR_NAMESPACE create secret docker-registry pulp-test --docker-server="${ROUTE_PATH}" --docker-username=admin --docker-password="$(oc -n $OPERATOR_NAMESPACE extract secret/example-pulp-admin-password --to=-)"
+oc -n $OPERATOR_NAMESPACE import-image --insecure=true test-image --from=${ROUTE_PATH}/${OPERATOR_NAMESPACE}/test:latest --confirm
 if [[ ! $(oc -n $OPERATOR_NAMESPACE get is test-image -ojsonpath='{.status.tags[0].items[0].generation}') > 0 ]] ; then exit 27 ; fi
 echo "[OK] image pulled ..."
 

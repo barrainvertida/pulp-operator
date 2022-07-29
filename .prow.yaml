@@ -38,7 +38,7 @@ presubmits:
     - image: quay.io/rhn_support_hyagi/prow-test:latest
       command:
       - .ci/prow/openshift-test.sh
-- name: prow-operator-ocp-checks
+- name: prow-operator-ocp-route-checks
   labels:
     preset-test: "true"
   always_run: true
