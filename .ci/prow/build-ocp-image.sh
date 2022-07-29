@@ -6,7 +6,7 @@ OPERATOR_NAMESPACE=${OPERATOR_NAMESPACE:-"pulp-operator-system"}
 BC_NAME="pulp-operator"
 
 echo "Creating build config $BC_NAME"
-oc -n $OPERATOR_NAMESPACE new-build --strategy docker --binary --image quay.io/operator-framework/ansible-operator:v1.22.1 --name $BC_NAME
+oc -n $OPERATOR_NAMESPACE new-build --strategy docker --binary --image-stream openshift/ansible-operator --name $BC_NAME
 
 echo "Waiting bc $BC_NAME sync repo ..."
 while true ; do if [ $(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME -oname) ] ; then break ; else sleep 5 ; fi ; done
