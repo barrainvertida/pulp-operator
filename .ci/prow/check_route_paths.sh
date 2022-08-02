@@ -6,7 +6,7 @@ CI_TEST=${CI_TEST:-pulp}
 API_ROOT=${API_ROOT:-"/pulp/"}
 OPERATOR_NAMESPACE=${OPERATOR_NAMESPACE:-"pulp-operator-system"}
 PULP_INSTANCE="ocp-example"
-INGRESS_DEFAULT_DOMAIN=$(oc -n $OPERATOR_NAMESPACE get ingresses.config/cluster -o jsonpath={.spec.domain})
+INGRESS_DEFAULT_DOMAIN=$(oc get ingresses.config/cluster -o jsonpath={.spec.domain})
 ROUTE_HOST=${1:-"${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"}
 
 OUTPUT_TEMPLATE='{{.spec.host}} {{.spec.path}} {{.spec.port.targetPort}} {{.spec.tls.termination}} {{.spec.to.name}}'

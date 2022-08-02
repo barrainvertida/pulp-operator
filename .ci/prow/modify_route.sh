@@ -17,7 +17,7 @@ CI_TEST=${CI_TEST:-pulp}
 API_ROOT=${API_ROOT:-"/pulp/"}
 OPERATOR_NAMESPACE=${OPERATOR_NAMESPACE:-"pulp-operator-system"}
 PULP_INSTANCE="ocp-example"
-INGRESS_DEFAULT_DOMAIN=$(oc -n $OPERATOR_NAMESPACE get ingresses.config/cluster -o jsonpath={.spec.domain})
+INGRESS_DEFAULT_DOMAIN=$(oc get ingresses.config/cluster -o jsonpath={.spec.domain})
 
 ####################
 # Update route_host

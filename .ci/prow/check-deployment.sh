@@ -24,7 +24,7 @@ PULP_INSTANCE="ocp-example"
 echo "Waiting pulp instance ..."
 while true ; do if [ $(oc -n $OPERATOR_NAMESPACE get pulp $PULP_INSTANCE -oname) ] ; then break ; else sleep 30 ; fi ; done
 
-INGRESS_DEFAULT_DOMAIN=$(oc -n $OPERATOR_NAMESPACE get ingresses.config/cluster -o jsonpath={.spec.domain})
+INGRESS_DEFAULT_DOMAIN=$(oc get ingresses.config/cluster -o jsonpath={.spec.domain})
 ROUTE_PATH=$(oc -n $OPERATOR_NAMESPACE get pulp $PULP_INSTANCE -ojsonpath='{.spec.route_host}')
 ROUTE_PATH=${ROUTE_PATH:-"${PULP_INSTANCE}.${INGRESS_DEFAULT_DOMAIN}"}
 
@@ -34,26 +34,20 @@ oc -n $OPERATOR_NAMESPACE wait --for condition=Pulp-Operator-Finished-Execution 
 
 source .ci/prow/check_route_paths.sh $ROUTE_PATH
 
-# should also tests things like:
-# - if deployment type=galaxy and /pulp_cookbook/content/ route is present ERROR
-# - if deployment type=galaxy and /pypi/ route is present ERROR
-# ...
-
 # check route certificates
 route_secret=$(oc -n $OPERATOR_NAMESPACE get pulp $PULP_INSTANCE -ojsonpath='{.spec.route_tls_secret}')
 if [[ $route_secret != "" ]] ; then
   for route in $(oc -n $OPERATOR_NAMESPACE get routes -oname) ; do
-    route_certificate=$(oc -n $OPERATOR_NAMESPACE get route $route -ogo-template='{{.spec.tls.certificate}}{{"\n"}}' | md5sum)
+    route_certificate=$(oc -n $OPERATOR_NAMESPACE get $route -ogo-template='{{.spec.tls.certificate}}{{"\n"}}' | md5sum)
     secret_certificate=$(oc -n $OPERATOR_NAMESPACE extract "secret/$route_secret" --keys=tls.crt  --to=- | md5sum)
     if [[ $secret_certificate != $route_certificate ]] ; then exit 21 ; fi
 
-    route_cert_key=$(oc -n $OPERATOR_NAMESPACE get route $route -ogo-template='{{.spec.tls.key}}{{"\n"}}' | md5sum)
+    route_cert_key=$(oc -n $OPERATOR_NAMESPACE get $route -ogo-template='{{.spec.tls.key}}{{"\n"}}' | md5sum)
     secret_cert_key=$(oc -n $OPERATOR_NAMESPACE extract "secret/$route_secret" --keys=tls.key  --to=- | md5sum)
     if [[ $route_cert_key != $secret_cert_key ]] ; then exit 22 ; fi
   done
   echo "[OK] route certificates ..."
 fi
-
 
 # validate route hostname and certificate
 check_host_cert=$(echo | openssl s_client -verify_hostname  ${ROUTE_PATH} -connect ${ROUTE_PATH}:443 2>/dev/null | awk -F': ' '/Verification/ {print $2}')
@@ -83,5 +77,9 @@ if [[ ! $(oc -n $OPERATOR_NAMESPACE get is test-image -ojsonpath='{.status.tags[
 echo "[OK] image pulled ..."
 
 source .ci/prow/modify_route.sh
+
+# disabling these tests for now because of an issue, that will be
+# fixed in pulp-operator-go, which is avoiding the tests to keep executing
+# source .ci/prow/modify_route_tls.sh
 
 echo "All route configurations OK!"
