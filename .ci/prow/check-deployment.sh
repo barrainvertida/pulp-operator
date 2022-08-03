@@ -82,4 +82,6 @@ source .ci/prow/modify_route.sh
 # fixed in pulp-operator-go, which is avoiding the tests to keep executing
 # source .ci/prow/modify_route_tls.sh
 
+source .ci/prow/modify_ingress_type.sh
+
 echo "All route configurations OK!"
