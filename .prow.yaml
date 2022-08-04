@@ -49,6 +49,26 @@ presubmits:
     - image: quay.io/rhn_support_hyagi/prow-test:latest
       command:
       - .ci/prow/check-deployment.sh
+- name: prow-operator-ocp-serviceaccount-check
+  labels:
+    preset-test: "true"
+  always_run: true
+  decorate: true
+  skip_report: false
+  spec:
+    containers:
+    - image: golang-test
+      command: [ "go", "run", ".ci/prow/go/check_resources.go" ]
+      args:
+      - "pulp-operator-system"
+      - "pulp-operator-sa"
+      - "ocp-example"
+      workingDir: /home/prow/go/src/github.com/barrainvertida/pulp-operator/.ci/prow/go
+      env:
+      - name: GOCACHE
+        value: /tmp
+      - name: GOPATH
+        value: /home/prow/go/src/github.com/barrainvertida/pulp-operator/.ci/prow/go
 - name: prow-operator-ocp-uninstall
   labels:
     preset-test: "true"

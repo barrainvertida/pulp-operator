@@ -24,3 +24,7 @@ if [ $(oc -n $OPERATOR_NAMESPACE  get build ${BC_NAME}-$(oc -n $OPERATOR_NAMESPA
   echo "Build failed!"
   exit 1
 fi
+
+
+echo "Building golang test images ..."
+oc -n $OPERATOR_NAMESPACE new-build .ci/prow/go/ --strategy docker --image-stream openshift/golang:latest --name "golang-test"
