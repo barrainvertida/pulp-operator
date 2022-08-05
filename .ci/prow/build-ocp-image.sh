@@ -29,7 +29,7 @@ fi
 
 cd .ci/prow/go/
 echo "Building golang test images ..."
-oc -n $OPERATOR_NAMESPACE new-build --binary --strategy docker --image-stream openshift/golang:latest --name $GOLANG_BC_NAME
+oc -n $OPERATOR_NAMESPACE new-build --binary --strategy docker --name $GOLANG_BC_NAME
 echo "Waiting bc $BC_NAME sync repo ..."
 while true ; do if [ $(oc -n $OPERATOR_NAMESPACE get bc $GOLANG_BC_NAME -oname) ] ; then break ; else sleep 5 ; fi ; done
 echo "Starting to build container image ..."
