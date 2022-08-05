@@ -59,15 +59,15 @@ func main() {
 		log.Fatalf("ERROR: Failed to retrieve pulp instance: %v", err)
 	}
 
-	if checkSA(clientSet, pulp, namespace, serviceAccountName) {
-		os.Exit(0)
+	if !checkSA(clientSet, pulp, namespace, serviceAccountName) {
+		os.Exit(1)
 	}
 
-	if checkApiDeployment(clientSet, pulpInstanceName, namespace) {
-		os.Exit(0)
+	if !checkApiDeployment(clientSet, pulpInstanceName, namespace) {
+		os.Exit(2)
 	}
 
-	os.Exit(1)
+	os.Exit(0)
 }
 
 // checkSA returns true if the imagePullSecrets from Service Account are defined as expected
@@ -108,6 +108,9 @@ func checkSA(clientSet *kubernetes.Clientset, pulp map[string]interface{}, names
 		imagePullSecretsFromSA = append(imagePullSecretsFromSA, secret.Name)
 	}
 
+	log.Printf("imagePullSecrets from SA: %v\n", imagePullSecretsFromSA)
+	log.Printf("imagePullSecrets expected: %v\n", imagePullSecrets)
+
 	return reflect.DeepEqual(imagePullSecrets, imagePullSecretsFromSA)
 
 }
@@ -122,10 +125,17 @@ func checkApiDeployment(clientSet *kubernetes.Clientset, pulpInstanceName, names
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Args: []string{"pulp-content"},
+						},
+					},
+				},
 			},
 		},
 	}
+
 	return equality.Semantic.DeepDerivative(expectedDeployment.Spec, deployment.Spec)
 }
 func checkApiService(clientSet *kubernetes.Clientset, pulpInstanceName, namespace string) bool {
