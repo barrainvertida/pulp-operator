@@ -1,9 +1,25 @@
 #!/usr/bin/env bash
 
-set -e #fail in case of non zero return
+set -ex #fail in case of non zero return
 
 CI_TEST=${CI_TEST:-pulp}
 API_ROOT=${API_ROOT:-"/pulp/"}
+OPERATOR_NAMESPACE=${OPERATOR_NAMESPACE:-"pulp-operator-system"}
+BC_NAME="pulp-operator"
+
+# make sure that bc is already created
+while [[ ! $(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME) ]] ; do sleep 2 ;done
+# wait until bc updates its version (instantiate the first build)
+while [[ $(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME -ojsonpath='{.status.lastVersion}') == 0 ]] ; do sleep 2 ; done
+# wait until the build finishes
+oc -n $OPERATOR_NAMESPACE wait --timeout=300s --for=condition=Running=false $(oc -n $OPERATOR_NAMESPACE get build ${BC_NAME}-$(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME -ojsonpath='{.status.lastVersion}') -oname)
+
+# we should abort execution if the build failed (without the built image the remaining tasks will also fail)
+if [ $(oc -n $OPERATOR_NAMESPACE  get build ${BC_NAME}-$(oc -n $OPERATOR_NAMESPACE get bc $BC_NAME -ojsonpath='{.status.lastVersion}')  -ojsonpath='{.status.phase}') != 'Complete' ] ; then
+  echo "Build failed!"
+  exit 1
+fi
+
 
 show_logs() {
   oc get pods -o wide
@@ -23,12 +39,19 @@ show_logs() {
   exit 1
 }
 
-sed -i 's/kubectl/oc/g' Makefile
-make deploy IMG=quay.io/pulp/pulp-operator:devel
-oc apply -f .ci/assets/kubernetes/pulp-admin-password.secret.yaml
-
 ROUTE_HOST="pulpci.$(oc get ingresses.config/cluster -o jsonpath={.spec.domain})"
 echo $ROUTE_HOST
+make deploy IMG=`oc -n $OPERATOR_NAMESPACE get is $BC_NAME -o go-template='{{.status.dockerImageRepository}}:{{(index .status.tags 0).tag}}'`
+
+### THIS IS A WORKAROUND TO FIX AN ISSUE ON MANUALLY DEFINING THE REDHAT-OPERATORS-PULL-SECRET IMAGEPULLSECRET
+### CAUSING THE OTHER PULL SECRETS FROM SA (LIKE THE ONE FROM INTERNAL REGISTRY) NOT BEING AVAILABLE TO THE PODS
+#oc -n $OPERATOR_NAMESPACE secret link pulp-operator-sa redhat-operators-pull-secret --for=pull
+oc -n $OPERATOR_NAMESPACE patch deployment pulp-operator-controller-manager --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/imagePullSecrets", "value":[]}]'
+
+### update deployment/pulp-operator-controller-manager to use our built image instead of the one from quay
+oc -n $OPERATOR_NAMESPACE set image-lookup deploy/pulp-operator-controller-manager
+
+oc apply -n $OPERATOR_NAMESPACE --kubeconfig=/etc/kubeconfig/config -f .ci/assets/kubernetes/pulp-admin-password.secret.yaml
 
 if [[ "$CI_TEST" == "galaxy" ]]; then
   CR_FILE=config/samples/pulpproject_v1beta1_pulp_cr.galaxy.ocp.ci.yaml
@@ -36,14 +59,31 @@ else
   CR_FILE=config/samples/pulpproject_v1beta1_pulp_cr.ocp.ci.yaml
 fi
 
-sed -i "s/route_host_placeholder/$ROUTE_HOST/g" $CR_FILE
-oc apply -f $CR_FILE
-oc wait --for condition=Pulp-Routes-Ready --timeout=-1s -f $CR_FILE || show_logs
+# create network policy to allow the router pods to communicate with the pods from pulp namespace
+oc apply -n $OPERATOR_NAMESPACE -f-<<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-openshift-ingress
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          network.openshift.io/policy-group: ingress
+  podSelector: {}
+  policyTypes:
+  - Ingress
+EOF
 
-API_POD=$(oc get pods -l app.kubernetes.io/component=api -oname)
+sed -i "s/route_host_placeholder/$ROUTE_HOST/g" $CR_FILE
+oc -n $OPERATOR_NAMESPACE apply -f $CR_FILE
+oc -n $OPERATOR_NAMESPACE wait --for condition=Pulp-Routes-Ready --timeout=-1s -f $CR_FILE || show_logs
+
+API_POD=`oc -n $OPERATOR_NAMESPACE --kubeconfig=/etc/kubeconfig/config get pods -l app.kubernetes.io/component=api -oname`
 for tries in {0..180}; do
-  pods=$(oc get pods -o wide)
-  if [[ $(kubectl logs "$API_POD"|grep 'Listening at: ') ]]; then
+  pods=$(oc -n $OPERATOR_NAMESPACE get pods -o wide)
+  if [[ $(oc -n $OPERATOR_NAMESPACE logs "$API_POD"|grep 'Listening at: ') ]]; then
     echo "PODS:"
     echo "$pods"
     break
@@ -67,7 +107,8 @@ for tries in {0..180}; do
   fi
   sleep 5
 done
-oc exec ${API_POD} -- curl -L http://localhost:24817${API_ROOT}api/v3/status/ || show_logs
+oc -n $OPERATOR_NAMESPACE exec ${API_POD} -- curl -L http://localhost:24817${API_ROOT}api/v3/status/ || show_logs
+oc -n $OPERATOR_NAMESPACE --kubeconfig=/etc/kubeconfig/config exec ${API_POD} -- curl -L http://localhost:24817${API_ROOT}api/v3/status/ || show_logs
 
 BASE_ADDR="https://${ROUTE_HOST}"
 echo ${BASE_ADDR}${API_ROOT}api/v3/status/

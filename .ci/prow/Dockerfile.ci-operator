@@ -1,7 +1,9 @@
 FROM quay.io/operator_testing/operator-test-playbooks
 
+ENV PATH "$PATH:/usr/local/go/bin"
+
 RUN	dnf -y update && \
-    dnf -y install cmake && \
+    dnf -y install cmake skopeo && \
     dnf clean all
 
 RUN pip3 install -U pip
@@ -9,6 +11,7 @@ RUN pip3 install ansible jmespath molecule more-itertools openshift yamllint pul
 
 RUN curl -Lo /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.11.1/kind-linux-amd64
 RUN curl https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/stable/openshift-client-linux.tar.gz | tar xvzf - -C /usr/local/bin oc --skip-old-files
+RUN curl -LO https://go.dev/dl/go1.19.linux-amd64.tar.gz ; tar -C /usr/local -xzf go1.19.linux-amd64.tar.gz
 RUN chmod ug+x /usr/local/bin/kind /usr/local/bin/oc
 
 RUN ["/bin/bash", "-c", "ls -la"]

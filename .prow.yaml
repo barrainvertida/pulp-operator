@@ -1,0 +1,91 @@
+# test
+presets:
+- labels:
+    preset-test: "true"
+  env:
+  - name: KUBECONFIG
+    value: /etc/kubeconfig/config
+  volumes:
+  - name: kubeconfig
+    secret:
+      defaultMode: 0644
+      secretName: kubeconfig
+  volumeMounts:
+  - name: kubeconfig
+    mountPath: /etc/kubeconfig
+    readonly: true
+
+presubmits:
+- name: prow-build-image
+  labels:
+    preset-test: "true"
+  always_run: true
+  decorate: true
+  skip_report: false
+  spec:
+    containers:
+    - image: quay.io/rhn_support_hyagi/prow-test:latest
+      command:
+      - .ci/prow/build-ocp-image.sh
+- name: prow-operator-ocp-deploy
+  labels:
+    preset-test: "true"
+  always_run: true
+  decorate: true
+  skip_report: false
+  spec:
+    containers:
+    - image: quay.io/rhn_support_hyagi/prow-test:latest
+      command:
+      - .ci/prow/openshift-test.sh
+- name: prow-operator-ocp-route-checks
+  labels:
+    preset-test: "true"
+  always_run: true
+  decorate: true
+  skip_report: false
+  spec:
+    containers:
+    - image: quay.io/rhn_support_hyagi/prow-test:latest
+      command:
+      - .ci/prow/check-deployment.sh
+- name: prow-operator-ocp-serviceaccount-check
+  labels:
+    preset-test: "true"
+  always_run: true
+  decorate: true
+  skip_report: false
+  spec:
+    containers:
+    - image: image-registry.openshift-image-registry.svc:5000/pulp-operator-system/golang-test
+      command: [ "check_resources" ]
+      args:
+      - "pulp-operator-system"
+      - "pulp-operator-sa"
+      - "ocp-example"
+- name: prow-operator-ocp-uninstall
+  labels:
+    preset-test: "true"
+  always_run: true
+  decorate: true
+  skip_report: false
+  spec:
+    containers:
+    - image: quay.io/rhn_support_hyagi/prow-test:latest
+      command:
+      - .ci/prow/uninstall.sh
+#- name: ci-operator
+#  labels:
+#    preset-test: "true"
+#  always_run: true
+#  decorate: true
+#  skip_report: false
+#  spec:
+#    containers:
+#    - image: quay.io/rhn_support_hyagi/ci-operator:test
+#      args:
+#      - --config=.ci/prow/test.yaml
+#      - --git-ref=barrainvertida/pulp-operator@test-prow
+#      - --target=.
+#      command:
+#      - ci-operator
